@@ -7,39 +7,42 @@ import { timeout } from "../../config/globalConfig";
 let loginPage: LoginPage;
 let assert: Assert;
 
-Given('que o usuário está na tela de login', { timeout: timeout }, async function () {
+Given('the user is on the login page', { timeout: timeout }, async function () {
   loginPage = new LoginPage(fixture.page);
   assert = new Assert(fixture.page);
   await loginPage.goto(process.env.BASEURL);
   await loginPage.getSwagLabsText();
 });
 
-When('preenche o usuário correto', { timeout: timeout }, async function () {
+When('the user enters the correct username', { timeout: timeout }, async function () {
   await loginPage.fillUserName(process.env.USER_NAME);
 });
 
-When('preenche o usuário incorreto', { timeout: timeout }, async function () {
-  await loginPage.fillUserName("usuario-incorreto");
+When('the user enters the incorrect username', { timeout: timeout }, async function () {
+  await loginPage.fillUserName("incorrect-username");
 });
 
-When('preenche a senha correta', { timeout: timeout }, async function () {
+When('the user enters the correct password', { timeout: timeout }, async function () {
   await loginPage.fillPassword(process.env.PASSWORD);
 });
 
-When('preenche a senha incorreta', { timeout: timeout }, async function () {
-  await loginPage.fillPassword("senha-incorreta");
+When('the user enters the incorrect password', { timeout: timeout }, async function () {
+  await loginPage.fillPassword("incorrect-password");
 });
 
-When('clica no botão login', { timeout: timeout }, async function () {
+When('the user clicks the login button', { timeout: timeout }, async function () {
   await loginPage.waitAndClickLoginButton();
 });
 
-Then('a página inicial é acessada', { timeout: timeout }, async function () {
-  const titleTest = await loginPage.getProductsText();
-  assert.assertElementContains(titleTest, "Products");
+Then('the home page is displayed', { timeout: timeout }, async function () {
+  const titleText = await loginPage.getProductsText();
+  assert.assertElementContains(titleText, "Products");
 });
 
-Then('uma mensagem de erro é apresentada', { timeout: timeout }, async function () {
+Then('an error message is displayed', { timeout: timeout }, async function () {
   const errorMessage = await loginPage.getErrorMessageText();
-  assert.assertElementContains(errorMessage, "Username and password do not match any user in this service");
+  assert.assertElementContains(
+    errorMessage,
+    "Username and password do not match any user in this service"
+  );
 });

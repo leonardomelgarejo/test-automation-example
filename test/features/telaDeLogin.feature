@@ -1,25 +1,25 @@
-Feature: Tela de Login
+Feature: Login Page
 
-  @ui @login @sucesso
-  Scenario: 01-Login com sucesso
-     Given que o usuário está na tela de login
-      When preenche o usuário correto
-       And preenche a senha correta
-       And clica no botão login
-      Then a página inicial é acessada
-  
-  @ui @login @sem-sucesso @usuario-incorreto
-  Scenario: 02-Login sem sucesso - Nome de usuário incorreto
-     Given que o usuário está na tela de login
-      When preenche o usuário incorreto
-       And preenche a senha correta
-       And clica no botão login
-      Then uma mensagem de erro é apresentada
+  @ui @login @success
+  Scenario: 01 - Successful login
+    Given the user is on the login page
+    When the user enters the correct username
+    And the user enters the correct password
+    And the user clicks the login button
+    Then the home page is displayed
 
-  @ui @login @sem-sucesso @senha-incorreta
-  Scenario: 03-Login sem sucesso - Senha errada
-     Given que o usuário está na tela de login
-      When preenche o usuário correto
-       And preenche a senha incorreta
-       And clica no botão login
-      Then uma mensagem de erro é apresentada
+  @ui @login @unsuccessful @incorrect-username
+  Scenario: 02 - Unsuccessful login - Incorrect username
+    Given the user is on the login page
+    When the user enters the incorrect username
+    And the user enters the correct password
+    And the user clicks the login button
+    Then an error message is displayed
+
+  @ui @login @unsuccessful @incorrect-password
+  Scenario: 03 - Unsuccessful login - Incorrect password
+    Given the user is on the login page
+    When the user enters the correct username
+    And the user enters the incorrect password
+    And the user clicks the login button
+    Then an error message is displayed
