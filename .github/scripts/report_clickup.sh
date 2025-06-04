@@ -9,14 +9,14 @@ mkdir -p "$TMP_DIR"
 > "$SCENARIO_CSV"
 > "$ATTACH_CSV"
 
-echo "🔍 Reportando Test Scenarios em ClickUp…"
-# Extrai o nome de cada Feature (array principal → .[].name)
+echo "🔍 Reporting Test Scenarios to ClickUp…"
+# Extract the name of each Feature (top-level array → .[].name)
 readarray -t FEATURES < <(
   jq -r '.[].name' test-results/cucumber-report.json | sort -u
 )
 
 for FEATURE in "${FEATURES[@]}"; do
-  # Verifica se algum passo da Feature falhou
+  # Check if any step in the Feature failed
   if jq -e --arg f "$FEATURE" \
        '[ .[] | select(.name==$f) | .elements? // [] | .[] | .steps[] | select(.result.status=="failed") ] | length>0' \
        test-results/cucumber-report.json >/dev/null; then
@@ -26,7 +26,7 @@ for FEATURE in "${FEATURES[@]}"; do
   fi
 
   echo "🔎 Feature: '$FEATURE' → $NEW_STATUS"
-  # Busca tarefa pelo nome na lista
+  # Search for a task by name in the list
   RESPONSE=$(curl -s -G "https://api.clickup.com/api/v2/list/$LIST_ID/task" \
     --data-urlencode "search=$FEATURE" \
     --data-urlencode "include_closed=true" \
@@ -37,43 +37,43 @@ for FEATURE in "${FEATURES[@]}"; do
     '.tasks[] | select(.name==$name) | .status // empty')
 
   if [[ -n "$TASK_ID" ]]; then
-    # Se já existe, atualiza status se necessário
+    # If it already exists, update status if necessary
     if [[ "$EXISTING_STATUS" != "$NEW_STATUS" ]]; then
-      echo "🔄 Atualizando status: $EXISTING_STATUS → $NEW_STATUS"
+      echo "🔄 Updating status: $EXISTING_STATUS → $NEW_STATUS"
       curl -s -X PUT "https://api.clickup.com/api/v2/task/$TASK_ID" \
         -H "Authorization: $CLICKUP_TOKEN" \
         -H "Content-Type: application/json" \
         -d "{\"status\":\"$NEW_STATUS\"}"
     else
-      echo "✅ Já está em '$EXISTING_STATUS'"
+      echo "✅ Already in '$EXISTING_STATUS'"
     fi
   else
-    # Cria a tarefa (tipo padrão) com tag "test-scenario"
-    echo "➕ Criando feature '$FEATURE' → $NEW_STATUS"
+    # Create the task (default type) with tag "test-scenario"
+    echo "➕ Creating feature '$FEATURE' → $NEW_STATUS"
     CREATED=$(curl -s -X POST "https://api.clickup.com/api/v2/list/$LIST_ID/task" \
       -H "Authorization: $CLICKUP_TOKEN" \
       -H "Content-Type: application/json" \
       -d "$(jq -n \
             --arg name        "$FEATURE" \
-            --arg description "Feature \"$FEATURE\" com status: $NEW_STATUS." \
+            --arg description "Feature \"$FEATURE\" with status: $NEW_STATUS." \
             --arg status      "$NEW_STATUS" \
             '{name:$name,description:$description,status:$status,tags:["test-scenario"]}')")
     TASK_ID=$(echo "$CREATED" | jq -r '.id')
   fi
 
-  # Guarda ID da feature para vincular subtasks depois
+  # Save Feature ID to link subtasks later
   echo "${FEATURE}|${TASK_ID}" >> "$SCENARIO_CSV"
 done
 
 echo ""
-echo "🔍 Reportando Test Cases (subtasks)…"
-# Constroi mapa FEATURE → PARENT_ID
+echo "🔍 Reporting Test Cases (subtasks)…"
+# Build map FEATURE → PARENT_ID
 declare -A PARENT
 while IFS='|' read -r FEATURE ID; do
   PARENT["$FEATURE"]=$ID
 done < "$SCENARIO_CSV"
 
-# Extrai cada cenário: só de features que têm elements != null
+# Extract each scenario: only from features with elements != null
 readarray -t SCENARIOS < <(
   jq -r '
     .[]
@@ -86,7 +86,7 @@ readarray -t SCENARIOS < <(
 
 for idx in "${!SCENARIOS[@]}"; do
   SCENARIO="${SCENARIOS[idx]}"
-  # Descobre a feature-pai que contém esse cenário
+  # Find the parent feature that contains this scenario
   FEATURE=$(jq -r --arg s "$SCENARIO" '
     .[]
     | select((.elements // []) | map(.name) | index($s))
@@ -95,11 +95,11 @@ for idx in "${!SCENARIOS[@]}"; do
   PARENT_ID=${PARENT["$FEATURE"]}
 
   if [[ -z "$PARENT_ID" ]]; then
-    echo "⚠️ Pai não encontrado para '$SCENARIO'"
+    echo "⚠️ Parent not found for '$SCENARIO'"
     continue
   fi
 
-  # Define status do cenário (rejected ou test complete)
+  # Determine scenario status (rejected or test complete)
   if jq -e --arg s "$SCENARIO" \
        '[ .[] | .elements? // [] | .[] | select(.name==$s) | .steps[] | select(.result.status=="failed") ] | length>0' \
        test-results/cucumber-report.json >/dev/null; then
@@ -110,9 +110,9 @@ for idx in "${!SCENARIOS[@]}"; do
 
   TASK_NAME="$SCENARIO"
   echo ""
-  echo "🔎 Subtask: '$TASK_NAME' (↑ $FEATURE) → $NEW_STATUS"
+  echo "🔎 Subtask: '$TASK_NAME' (parent: $FEATURE) → $NEW_STATUS"
 
-  # Busca subtasks do pai
+  # Fetch subtasks of the parent
   RESPONSE=$(curl -s -G "https://api.clickup.com/api/v2/task/$PARENT_ID" \
     --data-urlencode "include_subtasks=true" \
     -H "Authorization: $CLICKUP_TOKEN")
@@ -122,7 +122,7 @@ for idx in "${!SCENARIOS[@]}"; do
   EXISTING_STATUS=$(echo "$SUBS" | jq -r --arg name "$TASK_NAME" \
     '.[] | select(.name==$name) | .status // empty')
 
-  # Monta comentário com todos os steps e possíveis mensagens de erro
+  # Build comment with all steps and possible error messages
   RAW=$(jq -r --arg s "$SCENARIO" '
     .[]
     | .elements? // []
@@ -138,7 +138,7 @@ for idx in "${!SCENARIOS[@]}"; do
   ' test-results/cucumber-report.json)
   COMMENT="Scenario: $SCENARIO"$'\n'"$RAW"
 
-  # Extrai todos os embeddings (prints, vídeos, etc) e grava em arquivos
+  # Extract all embeddings (screenshots, videos, etc.) and save to files
   readarray -t EMBEDS < <(
     jq -r --arg s "$SCENARIO" '
       .[]
@@ -158,11 +158,11 @@ for idx in "${!SCENARIOS[@]}"; do
     B64=${e#*,}
     [[ -z "$B64" ]] && continue
     case "$MTYPE" in
-      video/webm)       EXT="webm" ;;
-      application/json) EXT="json" ;;
-      text/plain)       EXT="txt"  ;;
-      image/png)        EXT="png"  ;;
-      *)                EXT="bin"  ;;
+      video/webm)       EXT="webm"  ;;
+      application/json) EXT="json"  ;;
+      text/plain)       EXT="txt"   ;;
+      image/png)        EXT="png"   ;;
+      *)                EXT="bin"   ;;
     esac
     BASE="$TMP_DIR/${idx}_${SCENARIO// /_}"
     FILE="${BASE}.${EXT}"
@@ -176,25 +176,25 @@ for idx in "${!SCENARIOS[@]}"; do
   done
 
   if [[ -n "$TASK_ID" ]]; then
-    # Se subtask já existe, atualiza o status se mudou e adiciona comentário
+    # If subtask already exists, update status if changed and add comment
     if [[ "$EXISTING_STATUS" != "$NEW_STATUS" ]]; then
-      echo "🔄 Atualizando status: $EXISTING_STATUS → $NEW_STATUS"
+      echo "🔄 Updating status: $EXISTING_STATUS → $NEW_STATUS"
       curl -s -X PUT "https://api.clickup.com/api/v2/task/$TASK_ID" \
         -H "Authorization: $CLICKUP_TOKEN" \
         -H "Content-Type: application/json" \
         -d "{\"status\":\"$NEW_STATUS\"}"
 
-      # Comenta no task com detalhes de logs/erros
+      # Post a comment with log/error details
       curl -s -X POST "https://api.clickup.com/api/v2/task/$TASK_ID/comment" \
         -H "Authorization: $CLICKUP_TOKEN" \
         -H "Content-Type: application/json" \
         -d "$(jq -n --arg text "$COMMENT" '{comment_text:$text}')"
     else
-      echo "✅ Já está em '$EXISTING_STATUS'"
+      echo "✅ Already in '$EXISTING_STATUS'"
     fi
   else
-    # Cria a subtask (tipo padrão) com tag "test-case"
-    echo "➕ Criando subtask '$TASK_NAME'"
+    # Create the subtask (default type) with tag "test-case"
+    echo "➕ Creating subtask '$TASK_NAME'"
     PAYLOAD=$(jq -n \
       --arg name        "$TASK_NAME" \
       --arg description "$COMMENT" \
@@ -208,9 +208,9 @@ for idx in "${!SCENARIOS[@]}"; do
     TASK_ID=$(echo "$CREATED" | jq -r '.id')
   fi
 
-  # Anexa arquivos, caso existam, e registra a URL no CSV
+  # Attach files, if any exist, and record their URLs in the CSV
   for F in "${ATTACH_FILES[@]}"; do
-    echo "📎 Anexando $F"
+    echo "📎 Attaching $F"
     ATTACH_RES=$(curl -s -X POST "https://api.clickup.com/api/v2/task/$TASK_ID/attachment" \
       -H "Authorization: $CLICKUP_TOKEN" \
       -F "attachment=@${F}")
@@ -220,4 +220,4 @@ for idx in "${!SCENARIOS[@]}"; do
 done
 
 echo ""
-echo "🎉 Tudo reportado em ClickUp!"
+echo "🎉 All items reported to ClickUp!"

@@ -19,14 +19,6 @@ on:
         description: 'Cucumber Tags'
         required: false
         default: ''
-      report_scenarios:
-        description: 'Report Test Scenarios and Test Cases in ClickUp?'
-        required: false
-        default: 'no'
-        type: choice
-        options:
-          - 'yes'
-          - 'no'
       qa_report:
         description: 'Generate QA Report?'
         required: false
@@ -125,7 +117,7 @@ jobs:
         run: ./.github/scripts/clickup_fail.sh
 
       - name: Report Test Scenarios & Cases in ClickUp
-        if: ${{ always() && (github.event.inputs.report_scenarios == 'yes' || github.event.inputs.qa_report == 'yes') }}
+        if: ${{ always() && github.event.inputs.qa_report == 'yes' }}
         run: ./.github/scripts/report_clickup.sh
 
       - name: QA Report & Update ClickUp

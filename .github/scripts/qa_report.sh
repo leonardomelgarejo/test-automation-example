@@ -1,34 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Valida variáveis de ambiente obrigatórias
+# Validate required environment variables
 : "${CLICKUP_TOKEN:?Environment variable CLICKUP_TOKEN is not set}"
 : "${WORKSPACE_ID:?Environment variable WORKSPACE_ID is not set}"
 : "${DOC_ID:?Environment variable DOC_ID is not set}"
-: "${PAGE_ID:?Environment variable PAGE_ID is not be set}"
+: "${PAGE_ID:?Environment variable PAGE_ID is not set}"
 
 REPORT_JSON="test-results/cucumber-report.json"
 if [[ ! -f "$REPORT_JSON" ]]; then
-  echo "❌ Arquivo $REPORT_JSON não encontrado!" >&2
+  echo "❌ File $REPORT_JSON not found!" >&2
   exit 1
 fi
 
-echo "📝 Gerando QA Report em Markdown…"
+echo "📝 Generating QA Report in Markdown…"
 mkdir -p tmp
 
-# 1) Indicadores de Test Scenarios
+# 1) Test Scenarios Indicators
 TOTAL_SCENARIOS=$(jq 'length' "$REPORT_JSON")
 FAILED_SCENARIOS=$(jq '[ .[] | select(any(.elements[]?.steps[]?; .result.status=="failed")) ] | length' "$REPORT_JSON")
 EXECUTED_SCENARIOS=$((TOTAL_SCENARIOS - FAILED_SCENARIOS))
 
-# 2) Indicadores de Test Cases
+# 2) Test Case Indicators
 TOTAL_CASES=$(jq '[ .[].elements[]?.name ] | unique | length' "$REPORT_JSON")
 FAILED_CASES=$(jq '[ .[].elements[]? | select(any(.steps[]?; .result.status=="failed")) | .name ] | unique | length' "$REPORT_JSON")
 EXECUTED_CASES=$((TOTAL_CASES - FAILED_CASES))
 
-# 3) Cabeçalho do relatório
+# 3) Report Header (with Drakkar logo to the left of the heading)
 cat <<EOF > tmp/qa_report.md
-## Test Results
+![Drakkar Logo](drakkar_logo.jpeg) ## Test Results
 
 ![Totals](https://img.shields.io/badge/Totals-green?style=for-the-badge)
 | **Type**       | **Total** | **Executed** | **Failed** |
@@ -41,7 +41,7 @@ cat <<EOF > tmp/qa_report.md
 |:-----------------:|:-----------:|:----------:|
 EOF
 
-# 4) Número de casos por cenário
+# 4) Number of cases per scenario
 mapfile -t FEATURES < <(jq -r '.[].name' "$REPORT_JSON" | sort -u)
 for FEATURE in "${FEATURES[@]}"; do
   TOTAL=$(jq --arg f "$FEATURE" '[ .[] | select(.name==$f) | .elements[]?.name ] | unique | length' "$REPORT_JSON")
@@ -50,42 +50,42 @@ for FEATURE in "${FEATURES[@]}"; do
   echo "| $FEATURE | $PASSED | $FAILED |" >> tmp/qa_report.md
 done
 
-# 5) Montar seção de evidências em blocos por Test Scenario
+# 5) Build evidence section grouped by Test Scenario
 ATTACH_CSV="tmp/attachments_urls.csv"
 if [[ -f "$ATTACH_CSV" ]]; then
   declare -A EVIDENCES
 
-  # 5.1) Acumula e etiqueta links por FEATURE e SCENARIO
+  # 5.1) Aggregate and label links by FEATURE and SCENARIO
   while IFS='|' read -r FEATURE SCENARIO URL; do
     KEY="${FEATURE}|||${SCENARIO}"
     [[ -z "$URL" ]] && continue
     ext="${URL##*.}"
     case "$ext" in
-      json)  label="ver json"  ;;
-      png)   label="ver imagem";;
-      webm)  label="ver video" ;;
-      *)     label="ver evidência";;
+      json)  label="view json"  ;;
+      png)   label="view image" ;;
+      webm)  label="view video" ;;
+      *)     label="view evidence" ;;
     esac
     EVIDENCES[$KEY]="${EVIDENCES[$KEY]:+${EVIDENCES[$KEY]}, }[${label}]($URL)"
   done < "$ATTACH_CSV"
 
-  # 5.2) Badge geral de evidências
+  # 5.2) General evidence badge
   echo "" >> tmp/qa_report.md
   echo "![Test Evidence](https://img.shields.io/badge/Test%20Evidence-orange?style=for-the-badge)" >> tmp/qa_report.md
 
-  # 5.3) Para cada Test Scenario, gera tabela com Test Cases ordenados
+  # 5.3) For each Test Scenario, generate a table with ordered Test Cases
   mapfile -t FEATURES_BLOCK < <(
     printf '%s\n' "${!EVIDENCES[@]}" |
     cut -d '|' -f1 |
     sort -u
   )
   for FEATURE_BLOCK in "${FEATURES_BLOCK[@]}"; do
-    # Cabeçalho deste bloco
+    # Header for this block
     echo "" >> tmp/qa_report.md
     echo "| **Test Scenario** | **Test Case** | **Test Evidence** |" >> tmp/qa_report.md
     echo "|:-----------------:|:-------------:|:-----------------:|" >> tmp/qa_report.md
 
-    # Lista e ordena os Test Cases
+    # List and sort the Test Cases
     mapfile -t SCENARIOS_BLOCK < <(
       printf '%s\n' "${!EVIDENCES[@]}" |
       grep -F "${FEATURE_BLOCK}|||" |
@@ -93,7 +93,7 @@ if [[ -f "$ATTACH_CSV" ]]; then
       sort
     )
 
-    # Preenche cada linha com todos os links consolidados
+    # Populate each row with all consolidated links
     for SCENARIO in "${SCENARIOS_BLOCK[@]}"; do
       KEY="${FEATURE_BLOCK}|||${SCENARIO}"
       LINKS="${EVIDENCES[$KEY]:-}"
@@ -102,15 +102,28 @@ if [[ -f "$ATTACH_CSV" ]]; then
   done
 
 else
-  # Sem evidências
+  # No evidence
   echo "" >> tmp/qa_report.md
   echo "| **Test Scenario** | **Test Case** | **Test Evidence** |" >> tmp/qa_report.md
   echo "|:-----------------:|:-------------:|:-----------------:|" >> tmp/qa_report.md
-  echo "🔍 Nenhum attachment encontrado em $ATTACH_CSV" >> tmp/qa_report.md
+  echo "🔍 No attachments found in $ATTACH_CSV" >> tmp/qa_report.md
 fi
 
-# 6) Atualiza documento no ClickUp no ClickUp
-echo "🔄 Atualizando ClickUp Doc com QA Report..."
+# 6) Add styled badge to trigger workflow_dispatch
+cat <<EOF >> tmp/qa_report.md
+
+---
+
+### ▶️  Run QA Report Manually
+
+[![Run QA Report](https://img.shields.io/badge/Run-QA%20Report-blue?style=for-the-badge)](https://github.com/leonardomelgarejo/test-automation-example/actions/workflows/cucumber-playwright.yml)
+
+> By clicking the badge above, you will be directed to the GitHub Actions dispatch page.  
+> There, select \`qa_report: yes\` in the input field (plus any other settings you want) and click **Run workflow**.
+EOF
+
+# 7) Update ClickUp Doc with QA Report
+echo "🔄 Updating ClickUp Doc with QA Report..."
 CONTENT=$(jq -Rs . tmp/qa_report.md)
 cat <<JSON > tmp/payload.json
 {"content_format":"text/md","content":$CONTENT}
@@ -122,4 +135,4 @@ curl -s -X PUT \
   -H "Content-Type: application/json" \
   --data-binary @tmp/payload.json
 
-echo "✅ QA Report enviado para ClickUp"
+echo "✅ QA Report sent to ClickUp"
