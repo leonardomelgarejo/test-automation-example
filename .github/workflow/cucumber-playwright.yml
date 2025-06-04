@@ -1,0 +1,170 @@
+name: Project Example - Pipeline(CI)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      env:
+        description: 'Select Environment'
+        required: true
+        default: 'test'
+        type: choice
+        options:
+          - 'dev'
+          - 'test'
+      cucumber_tags:
+        description: 'Cucumber Tags'
+        required: false
+        default: ''
+      report_scenarios:
+        description: 'Report Test Scenarios and Test Cases in ClickUp?'
+        required: false
+        default: 'no'
+        type: choice
+        options:
+          - 'yes'
+          - 'no'
+      qa_report:
+        description: 'Generate QA Report?'
+        required: false
+        default: 'no'
+        type: choice
+        options:
+          - 'yes'
+          - 'no'
+  schedule:
+    - cron: "0 11 * * 1-5"
+
+permissions:
+  contents: write
+  pages: write
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+
+    env:
+      ENV: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.env || 'test' }}
+
+      # Fixed secrets
+      USER_NAME_DEV: ${{ secrets.USER_NAME_DEV }}
+      USER_NAME_TEST: ${{ secrets.USER_NAME_TEST }}
+      PASSWORD_DEV: ${{ secrets.PASSWORD_DEV }}
+      PASSWORD_TEST: ${{ secrets.PASSWORD_TEST }}
+      BASEURL_DEV: ${{ secrets.BASEURL_DEV }}
+      BASEURL_TEST: ${{ secrets.BASEURL_TEST }}
+
+      # ClickUp
+      CLICKUP_LIST_ID: ${{ secrets.CLICKUP_LIST_ID }}
+      CLICKUP_TEST_LIST_ID: ${{ secrets.CLICKUP_TEST_LIST_ID }}
+      CLICKUP_API_TOKEN: ${{ secrets.CLICKUP_API_TOKEN }}
+      CLICKUP_TOKEN: ${{ secrets.CLICKUP_API_TOKEN }}
+      LIST_ID: ${{ secrets.CLICKUP_TEST_LIST_ID }}
+
+      # GitHub context
+      GITHUB_SERVER_URL: ${{ github.server_url }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      GITHUB_RUN_ID: ${{ github.run_id }}
+
+      # QA Report
+      WORKSPACE_ID: ${{ secrets.WORKSPACE_ID }}
+      DOC_ID:       ${{ secrets.DOC_ID }}
+      PAGE_ID:      ${{ secrets.PAGE_ID }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Make scripts executable
+        run: chmod +x .github/scripts/*.sh
+
+      - name: Setup Node.js (with npm cache)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Prepare dependencies (Node + types)
+        run: |
+          npm ci
+          npm install --save-dev @types/node
+
+      - name: Cache Playwright Chromium
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-chromium-browsers-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-chromium-browsers-
+
+      - name: Install Chromium + deps
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Cucumber tests
+        id: run_cucumber
+        run: |
+          if [ "$ENV" = "dev" ]; then
+            export USER_NAME="${USER_NAME_DEV}"
+            export PASSWORD="${PASSWORD_DEV}"
+            export BASEURL="${BASEURL_DEV}"
+          else
+            export USER_NAME="${USER_NAME_TEST}"
+            export PASSWORD="${PASSWORD_TEST}"
+            export BASEURL="${BASEURL_TEST}"
+          fi
+
+          TAGS="${{ github.event.inputs.cucumber_tags }}"
+          ./.github/scripts/run_cucumber.sh "$TAGS"
+
+      - name: Create or reopen bug in ClickUp for each failed scenario
+        if: failure()
+        run: ./.github/scripts/clickup_fail.sh
+
+      - name: Report Test Scenarios & Cases in ClickUp
+        if: ${{ always() && (github.event.inputs.report_scenarios == 'yes' || github.event.inputs.qa_report == 'yes') }}
+        run: ./.github/scripts/report_clickup.sh
+
+      - name: QA Report & Update ClickUp
+        if: ${{ always() && github.event.inputs.qa_report == 'yes' }}
+        run: ./.github/scripts/qa_report.sh
+
+      - name: Upload Cucumber Test Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cucumber-test-report
+          path: test-results
+          retention-days: 5
+
+  deploy-report:
+    needs: test
+    if: always()
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Test Report
+        uses: actions/download-artifact@v4
+        with:
+          name: cucumber-test-report
+          path: test-results
+
+      - name: Make scripts executable
+        run: chmod +x .github/scripts/*.sh
+
+      - name: Prepare HTML & JSON for Pages
+        run: ./.github/scripts/prepare_reports.sh
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: test-results
+          publish_branch: gh-pages
+          force_orphan: true
+          keep_files: true
