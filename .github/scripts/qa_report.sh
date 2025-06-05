@@ -28,7 +28,7 @@ EXECUTED_CASES=$((TOTAL_CASES - FAILED_CASES))
 
 # 3) Report Header (with Drakkar logo to the left of the heading)
 cat <<EOF > tmp/qa_report.md
-![Drakkar Logo](https://raw.githubusercontent.com/leonardomelgarejo/test-automation-example/main/assets/drakkar_logo.jpeg) 
+![Drakkar](https://raw.githubusercontent.com/leonardomelgarejo/test-automation-example/main/assets/drakkar.jpeg)
 
 ## Test Results
 
