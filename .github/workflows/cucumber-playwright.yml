@@ -19,14 +19,6 @@ on:
         description: 'Cucumber Tags'
         required: false
         default: ''
-      qa_report:
-        description: 'Generate QA Report?'
-        required: false
-        default: 'no'
-        type: choice
-        options:
-          - 'yes'
-          - 'no'
   schedule:
     - cron: "0 11 * * 1-5"
 
@@ -50,22 +42,10 @@ jobs:
       BASEURL_DEV: ${{ secrets.BASEURL_DEV }}
       BASEURL_TEST: ${{ secrets.BASEURL_TEST }}
 
-      # ClickUp
-      CLICKUP_LIST_ID: ${{ secrets.CLICKUP_LIST_ID }}
-      CLICKUP_TEST_LIST_ID: ${{ secrets.CLICKUP_TEST_LIST_ID }}
-      CLICKUP_API_TOKEN: ${{ secrets.CLICKUP_API_TOKEN }}
-      CLICKUP_TOKEN: ${{ secrets.CLICKUP_API_TOKEN }}
-      LIST_ID: ${{ secrets.CLICKUP_TEST_LIST_ID }}
-
       # GitHub context
       GITHUB_SERVER_URL: ${{ github.server_url }}
       GITHUB_REPOSITORY: ${{ github.repository }}
       GITHUB_RUN_ID: ${{ github.run_id }}
-
-      # QA Report
-      WORKSPACE_ID: ${{ secrets.WORKSPACE_ID }}
-      DOC_ID:       ${{ secrets.DOC_ID }}
-      PAGE_ID:      ${{ secrets.PAGE_ID }}
 
     steps:
       - name: Checkout repository
@@ -111,18 +91,6 @@ jobs:
 
           TAGS="${{ github.event.inputs.cucumber_tags }}"
           ./.github/scripts/run_cucumber.sh "$TAGS"
-
-      - name: Create or reopen bug in ClickUp for each failed scenario
-        if: failure()
-        run: ./.github/scripts/clickup_fail.sh
-
-      - name: Report Test Scenarios & Cases in ClickUp
-        if: ${{ always() && github.event.inputs.qa_report == 'yes' }}
-        run: ./.github/scripts/report_clickup.sh
-
-      - name: QA Report & Update ClickUp
-        if: ${{ always() && github.event.inputs.qa_report == 'yes' }}
-        run: ./.github/scripts/qa_report.sh
 
       - name: Upload Cucumber Test Report
         uses: actions/upload-artifact@v4
