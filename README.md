@@ -13,10 +13,10 @@ This project covers web test automation, built on Node.js core + Cucumber-JS/Pla
 * Install [Node.js 22.10.0](https://nodejs.org/pt/blog/release/v22.10.0)
 * Install [Cucumber-JS 11.1.1](https://github.com/cucumber/cucumber-js)
 * Install [Playwright 1.49](https://playwright.dev/docs/intro)
-* Clone the repository:  
-  ```bash
-  https://github.com/leonardomelgarejo/test-automation-example.git
-  ```
+* With the install command:  
+```bash
+npm install
+```
 * [Local Execution Adjustments](#local-execution-adjustments)
 
 ## Test location
